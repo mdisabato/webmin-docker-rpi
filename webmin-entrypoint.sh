@@ -23,23 +23,8 @@ set_root_passwd() {
   echo "root:$ROOT_PASSWORD" | chpasswd
 }
 
-# allow arguments to be passed to named
-if [[ ${1:0:1} = '-' ]]; then
-  EXTRA_ARGS="$@"
-  set --
-elif [[ ${1} == named || ${1} == $(which named) ]]; then
-  EXTRA_ARGS="${@:2}"
-  set --
-fi
-
 # default behaviour is to launch webmin
-if [[ -z ${1} ]]; then
-  if [ "${WEBMIN_ENABLED}" == "true" ]; then
-    create_webmin_data_dir
-    set_root_passwd
-    echo "Starting webmin..."
-    /etc/init.d/webmin start
-  fi
-else
-  exec "$@"
-fi
+create_webmin_data_dir
+set_root_passwd
+echo "Starting webmin..."
+/etc/init.d/webmin start
