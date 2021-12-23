@@ -1,35 +1,47 @@
-# Based on slab42/bind9.16 https://www.github.com/slab42/bind9.16
-# Modified to remove BIND
-
 # Use the latest Debian image as a parent
-
 FROM arm64v8/debian:buster-backports
+MAINTAINER "Michael Disabato" <mdisabato@dellamente.com>
 
-LABEL MAINTAINER "Michael Disabato" <mdisabato@dellamente.com>
-
-ENV WEBMIN_VERSION=1.983 \
-    DATA_DIR=/data
+ENV DEBIAN_FRONTEND=noninteractive \
+    TZ=America/Chicago
 
 # Initial updates and install core utilities
 RUN apt-get update -qq -y && \
     apt-get upgrade -y && \
     apt-get install -y \
+       python \
        wget \
-    && DEBIAN_FRONTEND=noninteractive apt-get install -y perl libnet-ssleay-perl \
-      libauthen-pam-perl libpam-runtime libio-pty-perl unzip shared-mime-info
+       curl \
+       apt-transport-https \
+       lsb-release \
+       ca-certificates \
+       gnupg2 \
+       software-properties-common \
+       locales \
+       cron
+	
+RUN rm -rf /var/lib/apt/lists/*
+    
+RUN dpkg-reconfigure locales
 
 # Install Webmin
-RUN rm -rf /etc/apt/apt.conf.d/docker-gzip-indexes \
- && apt-get update \
- && wget "http://prdownloads.sourceforge.net/webadmin/webmin_${WEBMIN_VERSION}_all.deb" -P /tmp/ \
- && dpkg -i /tmp/webmin_${WEBMIN_VERSION}_all.deb \
- && rm -rf /tmp/webmin_${WEBMIN_VERSION}_all.deb \
- && rm -rf /var/lib/apt/lists/*
-
-COPY webmin-entrypoint.sh /sbin/entrypoint.sh
-RUN chmod 755 /sbin/entrypoint.sh
+RUN echo root:password | chpasswd && \
+    echo "Acquire::GzipIndexes \"false\"; Acquire::CompressionTypes::Order:: \"gz\";" >/etc/apt/apt.conf.d/docker-gzip-indexes && \
+    update-locale LANG=C.UTF-8 && \
+    echo deb https://download.webmin.com/download/repository sarge contrib >> /etc/apt/sources.list && \
+    wget http://www.webmin.com/jcameron-key.asc && \
+    apt-key add jcameron-key.asc && \
+    apt-get update && \
+    apt-get install -y webmin && \
+    apt-get clean
 
 EXPOSE 10000/tcp
-VOLUME ["${DATA_DIR}"]
-ENTRYPOINT ["/sbin/entrypoint.sh"]
-CMD ["/usr/sbin/named"]
+ENV LC_ALL C.UTF-8
+
+WORKDIR /home
+RUN echo "#! /bin/bash" > entrypoint.sh && \
+    echo "sed -i 's;ssl=1;ssl=0;' /etc/webmin/miniserv.conf && \
+    systemctl enable cron && service webmin start && tail -f /dev/null" >> entrypoint.sh && \
+    chmod 755 entrypoint.sh
+
+CMD /home/entrypoint.sh
